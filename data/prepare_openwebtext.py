@@ -4,20 +4,26 @@ import numpy as np
 import tiktoken
 from datasets import load_dataset
 
+enc = tiktoken.get_encoding("gpt2")
+num_proc = 8
+
 
 def process(example):
-    enc = tiktoken.get_encoding("gpt2")
     ids = enc.encode_ordinary(example['text'])
     ids.append(enc.eot_token)
     out = {'ids': ids, 'len': len(ids)}
     return out
 
 
-def encode_openwebtext():
-    num_proc = 4
+def encode_openwebtext(fast_dev_run=False):
+
     dataset = load_dataset("openwebtext")
     split_dataset = dataset['train'].train_test_split(test_size=0.0005, seed=2357, shuffle=True)
     split_dataset['val'] = split_dataset.pop('test')
+
+    # do a fast dev run on val dataset
+    if fast_dev_run:
+        split_dataset.pop('train')
 
     tokenized = split_dataset.map(
         process,
@@ -28,9 +34,10 @@ def encode_openwebtext():
 
     idx = 0
     for split, dset in tokenized.items():
-        arr_len = dset['len']
+        arr_len = np.sum(dset['len'])
         filename = os.path.join(os.path.dirname(__file__), f'{split}.bin')
-        arr = np.memmap(filename, dtype=np.uint16, mode='w+', shape=(arr_len,))
+        dtype = np.uint16
+        arr = np.memmap(filename, dtype=dtype, mode='w+', shape=arr_len)
         total_batches = 1024
 
         for batch_idx in tqdm(range(total_batches), desc=f'writing {filename}'):
@@ -44,7 +51,7 @@ def encode_openwebtext():
 
 
 if __name__ == '__main__':
-    encode_openwebtext()
+    encode_openwebtext(fast_dev_run=True)
 
 
 
